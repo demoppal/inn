@@ -1,2 +1,2 @@
-import c
-c.main()
+import x
+x.main()
