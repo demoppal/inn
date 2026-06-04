@@ -1,95 +1,113 @@
-import logging
 import os
+import hashlib
+import requests
 import time
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from flask import Flask
-from threading import Thread
+import sys
 
-# Configuration
-BOT_TOKEN = "8706727466:AAEYGFLafGWwfRMIpkWx_8GCUr1zqRBimDU"
-WEB_SERVER_PORT = 5000
+# --- Telegram Bot Configuration ---
+# Render URL အသစ်သို့ အမှန်ပြင်ဆင်ထားပါသည်
+BOT_API_URL = "https://bot-wwwp.onrender.com/verify_key"
 
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# --- ANSI UI Colors ---
+C_BLUE    = "\033[94m"
+C_GREEN   = "\033[92m"
+C_YELLOW  = "\033[93m"
+C_RED     = "\033[91m"
+C_CYAN    = "\033[96m"
+C_WHITE   = "\033[97m"
+C_BOLD    = "\033[1m"
+C_END     = "\033[0m"
 
-# --- Starlink Module ကို ခေါ်ယူ Run မည့်အပိုင်း ---
-def run_starlink_in_bot():
+def clear_screen():
+    os.system("clear" if os.name != "nt" else "cls")
+
+def show_banner(my_id):
+    clear_screen()
+    print(f"{C_CYAN}{C_BOLD}" + "="*45)
+    print(f"        PREMIUM KEY VALIDATION SYSTEM        ")
+    print(f"="*45 + f"{C_END}")
+    print(f"{C_BOLD} YOUR DEVICE ID : {C_YELLOW}{my_id}{C_END}")
+    print(f"{C_CYAN}" + "-"*45 + f"{C_END}")
+
+def get_unique_id():
+    try:
+        android_id = os.popen("settings get secure android_id").read().strip()
+        if not android_id or "null" in android_id:
+            import platform
+            android_id = f"{platform.node()}-{platform.processor()}"
+        
+        unique_hash = hashlib.md5(android_id.encode()).hexdigest().upper()
+        return f"KN-{unique_hash[:10]}"
+    except Exception:
+        return "KN-UNKNOWN"
+
+def run_starlink():
+    print(f"\n{C_BLUE}[*] Launching Starlink Module...{C_END}")
+    time.sleep(1)
     try:
         import starlink
         if hasattr(starlink, 'main'):
             starlink.main()
         elif hasattr(starlink, 'start'):
             starlink.start()
-        return True, "Starlink Module ကို အောင်မြင်စွာ စတင်လိုက်ပါပြီ။"
-    except ImportError:
-        return False, "'starlink' module ဖိုင်ကို ဆာဗာပေါ်မှာ ရှာမတွေ့ပါ။"
-    except Exception as e:
-        return False, f"Starlink Run ရာတွင် အမှားတက်ခဲပါသည်: {e}"
-
-def get_main_menu_keyboard():
-    keyboard = [
-        [KeyboardButton("🚀 Starlink စတင်ရန်")],
-        [KeyboardButton("ℹ️ အကူအညီ")]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    welcome_text = (
-        f"မင်္ဂလာပါ {user.mention_html()} 🙏\n\n"
-        "ကျွန်ုပ်တို့၏ အခမဲ့ Bot မှ ကြိုဆိုပါတယ်။\n"
-        "အောက်က '🚀 Starlink စတင်ရန်' ခလုတ်ကို နှိပ်ပြီး တိုက်ရိုက် အသုံးပြုနိုင်ပါတယ်။"
-    )
-    await update.message.reply_text(welcome_text, parse_mode='HTML', reply_markup=get_main_menu_keyboard())
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = update.message.text.strip()
-    
-    if text == "🚀 Starlink စတင်ရန်":
-        await update.message.reply_text("⏳ Starlink Module ကို စတင်နေပါပြီ၊ ခေတ္တစောင့်ဆိုင်းပေးပါ...")
-        
-        success, msg = run_starlink_in_bot()
-        if success:
-            await update.message.reply_text(f"✅ {msg}")
         else:
-            await update.message.reply_text(f"❌ {msg}")
-            
-    elif text == "ℹ️ အကူအညီ":
-        help_text = (
-            "📖 **အသုံးပြုနည်း**\n\n"
-            "• '🚀 Starlink စတင်ရန်' ခလုတ်ကို နှိပ်လိုက်ရုံဖြင့် Bot က လုပ်ငန်းစဉ်ကို တိုက်ရိုက် အလုပ်လုပ်ပေးသွားမှာ ဖြစ်ပါတယ်။\n"
-            "• မည်သည့် Key မျှ ထည့်သွင်းပေးရန် မလိုဘဲ အခမဲ့ စမ်းသပ်နိုင်ပါတယ်။"
-        )
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+            print(f"{C_RED}[!] Error: Starlink main/start function not found.{C_END}")
+    except ImportError:
+        print(f"{C_RED}[!] Error: 'starlink.so' or 'starlink.py' file missing.{C_END}")
 
-app = Flask(__name__)
-@app.route("/", methods=["GET"])
-def health_check():
-    return "Bot is alive and free!", 200
+def verify_bot_key(key):
+    """Verifies the key with the Telegram Bot API on Render."""
+    try:
+        print(f"{C_BLUE}[*] Verifying Telegram Bot Key...{C_END}")
+        response = requests.post(BOT_API_URL, json={"key": key}, timeout=10)
+        
+        # Connection status_code ကို အရင်စစ်ဆေးခြင်း
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("status") == "success":
+                return True, result.get("message")
+            else:
+                return False, result.get("message", "Invalid Key")
+        elif response.status_code == 403:
+            return False, "Key is invalid or expired."
+        else:
+            return False, f"Server Error ({response.status_code})"
+    except Exception as e:
+        return False, "Connection Error: Cannot connect to Bot Server."
 
-def run_flask_app():
-    port = int(os.environ.get("PORT", WEB_SERVER_PORT))
-    app.run(host="0.0.0.0", port=port)
+def main():
+    my_id = get_unique_id()
+    
+    # --- Step 1: Telegram Bot Key Verification ---
+    clear_screen()
+    print(f"{C_CYAN}{C_BOLD}" + "="*45)
+    print(f"       TELEGRAM BOT KEY VERIFICATION       ")
+    print(f"="*45 + f"{C_END}")
+    print(f"{C_YELLOW}Please enter the 1-hour key from the Bot:{C_END}")
+    bot_key = input(f"{C_BOLD}KEY > {C_END}").strip()
+    
+    # Key မရိုက်ဘဲ Enter ခေါက်လိုက်ရင် ပိတ်ပစ်ရန်
+    if not bot_key:
+        print(f"\n{C_RED}[!] Key cannot be empty.{C_END}")
+        return
 
-def main() -> None:
-    # Flask Web Server ကို သီးသန့် Thread နဲ့ Background မှာ Run ခြင်း
-    Thread(target=run_flask_app, daemon=True).start()
+    is_valid, message = verify_bot_key(bot_key)
     
-    # Telegram Application ကို တည်ဆောက်ခြင်း
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Handlers များ ထည့်သွင်းခြင်း
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # v21+ ရေးထုံးအသစ်အတိုင်း String list ဖြင့် စာလုံးအသေး ပြောင်းလဲသတ်မှတ်ထားပါတယ်
-    application.run_polling(allowed_updates=["message"])
+    if is_valid:
+        print(f"\n{C_GREEN}{C_BOLD}[+] BOT KEY VALIDATED!{C_END}")
+        time.sleep(1)
+        
+        # --- Step 2: Run User's Original Logic ---
+        show_banner(my_id)
+        print(f"{C_GREEN}[+] Access Granted by Bot Key.{C_END}")
+        run_starlink()
+        
+    else:
+        print(f"\n{C_RED}{C_BOLD}[!] ACCESS DENIED: {message}{C_END}")
+        print(f"{C_WHITE}Please get a valid 1-hour key from the Telegram Bot.{C_END}")
+        print(f"{C_CYAN}" + "-"*45 + f"{C_END}")
+        input(f"\n{C_BOLD}{C_BLUE}[►] Press ENTER to exit... {C_END}")
 
 if __name__ == "__main__":
     main()
-    
+
