@@ -1,18 +1,13 @@
 import logging
 import os
-import sqlite3
 import time
-from datetime import datetime, timedelta
-import pytz
-
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, ChatMemberHandler, filters, ContextTypes
-from flask import Flask, request, jsonify
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from flask import Flask
 from threading import Thread
 
 # Configuration
 BOT_TOKEN = "8706727466:AAEYGFLafGWwfRMIpkWx_8GCUr1zqRBimDU"
-GROUP_ID = -1003505610406
 WEB_SERVER_PORT = 5000
 
 # Enable logging
@@ -22,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Starlink logic ကို တိုက်ရိုက် Run မည့်အပိုင်း ---
+# --- Starlink Module ကို ခေါ်ယူ Run မည့်အပိုင်း ---
 def run_starlink_in_bot():
     try:
         import starlink
@@ -33,9 +28,10 @@ def run_starlink_in_bot():
         return True, "Starlink Module ကို အောင်မြင်စွာ စတင်လိုက်ပါပြီ။"
     except ImportError:
         return False, "'starlink' module ဖိုင်ကို ဆာဗာပေါ်မှာ ရှာမတွေ့ပါ။"
+    except Exception as e:
+        return False, f"Starlink Run ရာတွင် အမှားတက်ခဲပါသည်: {e}"
 
 def get_main_menu_keyboard():
-    # Key စစ်တဲ့ ခလုတ်တွေကို ဖြုတ်ပြီး ရှင်းရှင်းလင်းလင်းပဲ ထားလိုက်ပါပြီ
     keyboard = [
         [KeyboardButton("🚀 Starlink စတင်ရန်")],
         [KeyboardButton("ℹ️ အကူအညီ")]
@@ -57,7 +53,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if text == "🚀 Starlink စတင်ရန်":
         await update.message.reply_text("⏳ Starlink Module ကို စတင်နေပါပြီ၊ ခေတ္တစောင့်ဆိုင်းပေးပါ...")
         
-        # Key စစ်ဆေးခြင်းမရှိဘဲ တိုက်ရိုက် Run စေခြင်း
         success, msg = run_starlink_in_bot()
         if success:
             await update.message.reply_text(f"✅ {msg}")
@@ -82,11 +77,19 @@ def run_flask_app():
     app.run(host="0.0.0.0", port=port)
 
 def main() -> None:
+    # Flask Web Server ကို သီးသန့် Thread နဲ့ Background မှာ Run ခြင်း
     Thread(target=run_flask_app, daemon=True).start()
+    
+    # Telegram Application ကို တည်ဆောက်ခြင်း
     application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Handlers များ ထည့်သွင်းခြင်း
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.run_polling(allowed_updates=[Update.MESSAGE])
+    
+    # v21+ ရေးထုံးအသစ်အတိုင်း String list ဖြင့် စာလုံးအသေး ပြောင်းလဲသတ်မှတ်ထားပါတယ်
+    application.run_polling(allowed_updates=["message"])
 
 if __name__ == "__main__":
     main()
+    
